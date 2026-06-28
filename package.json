@@ -1,0 +1,15 @@
+{
+  "name": "freelance-domination-engine",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "d1:init": "wrangler d1 execute fde-db --local --file=./schema.sql",
+    "logs": "wrangler tail"
+  },
+  "devDependencies": {
+    "wrangler": "^3.0.0",
+    "@cloudflare/workers-types": "^4.20240601.0"
+  }
+}
