@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
-//  FREELANCE DOMINATION ENGINE v2.2 — AUTO-APPLY ENGINE
-//  20 sources | Auto-apply via email + Upwork API | AI proposals
-//  Telegram alerts | Web dashboard | Scans every 3 min
+//  FREELANCE DOMINATION ENGINE v3.0 — PROFESSIONAL AGENT
+//  20 sources | Gemini Pro | Anti-hallucination | Auto-apply
+//  Email + Upwork API | Professional Telegram | Scans every 3 min
 // ═══════════════════════════════════════════════════════════════
 
 // ═══ CONFIG ═══
@@ -38,84 +38,79 @@ async function tGetMe(env) {
   if (!env.TELEGRAM_BOT_TOKEN) return { ok: false, error: "no token" };
   try {
     const r = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/getMe`);
-    return await r.json();
+    const d = await r.json();
+    return d;
   } catch (e) { return { ok: false, error: e.message }; }
 }
 
 async function tStartup(env) {
-  const m = `🚀 <b>FREELANCE DOMINATION ENGINE v2.2 — ACTIVATED</b>
+  const m = `<b>Freelance Domination Engine v3.0 — Active</b>
 
-⏰ Scanning every <b>3 minutes</b>
-🔍 Sources: <b>20 platforms</b>
-🤖 AI: <b>Gemini 1.5 Flash</b> proposals + auto-apply
-📧 Auto-apply: Email + Upwork API
-📊 Domains: <b>FEA | Flutter | AI Systems | General</b>
+Scanning: Every 3 minutes
+Sources: 20 working platforms
+AI: Gemini 1.5 Pro with anti-hallucination
+Domains: FEA · Flutter · AI Systems · General
+Email: bubbletech1502@gmail.com
 
-Your 24/7 job hunter is <b>LIVE</b>.`;
-  return await tSend(m, env);
+Your 24/7 job agent is live.`;
+  await tSend(m, env);
 }
 
 async function tError(ctx, err, env) {
-  const m = `⚠️ <b>${ctx} Error</b>
+  const m = `<b>${ctx} Error</b>
 <code>${(err.message || String(err)).slice(0,500)}</code>`;
   await tSend(m, env);
 }
 
 async function tScanStart(cycle, env) {
-  await tSend(`🔍 <b>Scan #${cycle} STARTED</b>
-Searching 20 platforms...`, env);
+  // Silent scan start — only notify on results to avoid Telegram spam
+  console.log(`Scan ${cycle} started`);
 }
 
 async function tJobFound(job, env) {
-  const bud = job.budget_max > 0 ? `$${job.budget_max.toLocaleString()}` : "Budget N/A";
-  const tier = job.budget_max >= 6000 ? "👑 PREMIUM" : job.budget_max >= 3000 ? "💼 SOLID" : job.budget_max >= 1000 ? "📊 MID" : "⚡ NEW";
-  const m = `${tier} | <b>${bud}</b>
-📌 ${job.title.slice(0,90)}
-🎯 Match: ${Math.round(job.match_score)}% | 🏷 ${job.domain}
-🔗 ${job.url.slice(0,80)}
-📡 Source: ${job.source}`;
+  const bud = job.budget_max > 0 ? `$${job.budget_max.toLocaleString()}` : "Budget: Not listed";
+  const hs = Math.round(job.match_score);
+  const ms = hs >= 50 ? "Strong" : hs >= 25 ? "Good" : "Moderate";
+  const m = `<b>${job.title.slice(0,90)}</b>
+${bud} · ${ms} match (${hs}%) · ${job.domain}
+${job.url}`;
   await tSend(m, env);
 }
 
 async function tProposal(prop, job, env) {
-  const m = `📝 <b>AI PROPOSAL READY</b> | $${Math.round(prop.price).toLocaleString()} | 🧠 Humanity: ${Math.round(prop.humanity_score)}/100
+  const hm = Math.round(prop.humanity_score);
+  const hs = hm >= 80 ? "Human" : hm >= 60 ? "Natural" : "Review suggested";
+  const m = `<b>Application Ready</b> · $${Math.round(prop.price).toLocaleString()} · ${hs} (${hm}/100)
 
-${prop.content.slice(0,950)}
+${prop.content.slice(0,1200)}
 
-<i>Based on: ${job.title.slice(0,60)}</i>`;
+—
+<i>Apply: ${job.url}</i>`;
   await tSend(m, env);
 }
 
 async function tApplyStatus(job, result, env) {
   if (result.method === "email") {
-    await tSend(`📧 <b>AUTO-APPLY QUEUED</b>
-Method: Email application
-To: ${result.recipient}
+    await tSend(`<b>Auto-apply queued</b>
+Method: Email to ${result.recipient}
 Job: ${job.title.slice(0,60)}
-Status: ${result.status === "queued" ? "⏳ Ready to send" : result.status}`, env);
+Status: ${result.status === "queued" ? "Ready to send" : result.status}`, env);
   } else if (result.method === "upwork_api") {
-    const icon = result.status === "submitted" ? "✅" : "❌";
-    await tSend(`${icon} <b>Upwork Auto-Apply</b>
-Job: ${job.title.slice(0,60)}
-Status: ${result.status}${result.error ? "\nError: " + result.error : ""}`, env);
+    const icon = result.status === "submitted" ? "Sent" : "Failed";
+    await tSend(`<b>Upwork ${icon}</b> · ${job.title.slice(0,60)}${result.error ? "\nError: " + result.error : ""}`, env);
   }
 }
 
 async function tSummary(cycle, newJobs, props, autoApplied, stats, env) {
-  const q = newJobs.filter(j => j.budget_max < 1000 && j.budget_max > 0).length;
-  const m = newJobs.filter(j => j.budget_max >= 1000 && j.budget_max < 3000).length;
-  const s = newJobs.filter(j => j.budget_max >= 3000 && j.budget_max < 6000).length;
-  const p = newJobs.filter(j => j.budget_max >= 6000).length;
+  if (!newJobs.length) {
+    await tSend(`Scan ${cycle} complete — no new jobs found. Next scan in 3 minutes.`, env);
+    return;
+  }
   const top = [...newJobs].sort((a, b) => b.match_score - a.match_score)[0];
-  let msg = `✅ <b>Scan #${cycle} COMPLETE</b>
-
-<b>NEW JOBS: ${newJobs.length}</b> | 📝 Proposals: ${props} | 🤖 Auto-Applied: ${autoApplied}`;
-  if (q) msg += `\n⚡ Quick ($300-999): ${q}`;
-  if (m) msg += `\n📊 Mid ($1K-2.9K): ${m}`;
-  if (s) msg += `\n💼 Solid ($3K-6K): ${s}`;
-  if (p) msg += `\n👑 Premium ($6K+): ${p}`;
-  if (top) msg += `\n\n🏆 <b>Top:</b> ${Math.round(top.match_score)}% — ${top.title.slice(0,55)}...`;
-  if (!newJobs.length) msg += `\n\n<i>No new jobs — scanning again in 3 min.</i>`;
+  let msg = `Scan ${cycle} — ${newJobs.length} new job${newJobs.length > 1 ? "s" : ""} found`;
+  if (props) msg += `, ${props} application${props > 1 ? "s" : ""} drafted`;
+  if (autoApplied) msg += `, ${autoApplied} auto-submitted`;
+  if (top) msg += `\n\nBest match: ${top.title.slice(0,60)} (${Math.round(top.match_score)}%)`;
   await tSend(msg, env);
 }
 
@@ -157,7 +152,7 @@ async function dbGetJobs(db, lim) {
 }
 
 async function dbGetProposals(db) {
-  const { results } = await db.prepare(`SELECT * FROM proposals ORDER BY created DESC LIMIT 50`).all();
+  const { results } = await db.prepare(`SELECT * FROM proposals ORDER BY created_at DESC LIMIT 50`).all();
   return results || [];
 }
 
@@ -169,7 +164,7 @@ async function dbLog(db, type, msg) {
 
 // ═══ SKILL MATCHER ═══
 const SKILLS = {
-  FEA: ["fea","finite element","ansys","abaqus","comsol","simulation","structural","stress","mesh","cfd","mechanical","nastran","ls-dyna","hypermesh","cfd analysis","thermal analysis"],
+  FEA: ["fea","finite element","ansys","abaqus","comsol","simulation","structural","stress","mesh","cfd","mechanical","nastran","ls-dyna","hypermesh","cfd analysis","thermal analysis","civil engineer","eit","pe engineer","anchorage","geotechnical","hydraulic","pavement","solidworks","autocad","revit","bentley","construction","infrastructure","surveying"],
   Flutter: ["flutter","dart","cross-platform","firebase","bloc","riverpod","getx","provider","mobile app","ios app","android app","flutterflow"],
   AI_Systems: ["machine learning","deep learning","ai engineer","llm","neural network","pytorch","tensorflow","rag","fine-tuning","nlp","computer vision","openai","langchain","huggingface","sklearn","data science","mlops","reinforcement learning","generative ai","gpt","bert","stable diffusion"],
 };
@@ -201,11 +196,28 @@ async function autoApplyEmail(job, proposal, env) {
   const email = extractEmail(job.description);
   if (!email) return { method: "none", reason: "no email found" };
   
+  const fromEmail = env.FROM_EMAIL || "bubbletech1502@gmail.com";
   const subject = `Application: ${job.title.slice(0, 60)}`;
-  const body = `${proposal.content}\n\n---\nPortfolio: [Your portfolio link]\nResume: [Your resume link]\nLinkedIn: [Your LinkedIn]`;
+  const body = `${proposal.content}\n\n---\nSent from ${fromEmail}`;
   
   await env.DB.prepare(`INSERT OR IGNORE INTO applications(id,job_id,method,recipient,subject,body,status,created_at)VALUES(?,?,?,?,?,?,?,?)`)
     .bind(hashSync(job.id + email), job.id, "email", email, subject, body, "pending", new Date().toISOString()).run();
+  
+  if (env.GMAIL_APP_PASSWORD) {
+    try {
+      const r = await fetch("https://api.mailchannels.net/tx/v1/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          personalizations: [{ to: [{ email }] }],
+          from: { email: fromEmail, name: "Bharath - Freelance Engineer" },
+          subject,
+          content: [{ type: "text/plain", value: body }]
+        })
+      });
+      if (r.ok) return { method: "email", recipient: email, status: "sent" };
+    } catch (e) { console.error("Email send error:", e.message); }
+  }
   
   return { method: "email", recipient: email, status: "queued" };
 }
@@ -247,60 +259,110 @@ async function autoApply(job, proposal, env) {
   const emailResult = await autoApplyEmail(job, proposal, env);
   if (emailResult.method === "email") return emailResult;
   
-  return { method: "manual", reason: "no auto-apply channel available" };
+  return { method: "manual", reason: "no auto-apply channel available. Use Telegram proposal to apply manually." };
 }
 
-// ═══ GEMINI AI ═══
-const DPROMPT = {
-  FEA: "Expert FEA simulation engineer. ANSYS, ABAQUS, COMSOL, CFD.",
-  Flutter: "Senior Flutter developer. BLoC, Firebase, performance optimization.",
-  AI_Systems: "AI/ML systems engineer. PyTorch, LLMs, MLOps, production AI.",
-  General: "Senior engineering consultant. Multidisciplinary technical expert."
-};
-
-const TPL = {
-  FEA: (j, p) => `Hey, your ${j.title.slice(0,40)} project caught my eye. I've delivered 40+ FEA projects — reduced sim time 40% via Python automation. ANSYS + ABAQUS certified.\n\nScope: Basic ($${Math.round(p*0.5).toLocaleString()}) / Professional ($${Math.round(p).toLocaleString()}) / Enterprise ($${Math.round(p*1.7).toLocaleString()})\n\nQuick chat to discuss?\n\nBest`,
-  Flutter: (j, p) => `Hey, saw you need Flutter work for ${j.title.slice(0,40)}. Built similar apps — 50K+ MAU. Flutter + BLoC + Firebase, 60fps. Published on both stores.\n\nScope: Basic ($${Math.round(p*0.5).toLocaleString()}) / Professional ($${Math.round(p).toLocaleString()}) / Enterprise ($${Math.round(p*1.7).toLocaleString()})\n\nLet me know if interested!\n\nBest`,
-  AI_Systems: (j, p) => `Hey, ${j.title.slice(0,40)} — exactly my domain. Built production ML systems: 6hr sims → 8min. Physics-informed neural nets + RAG pipelines deployed.\n\nScope: Basic ($${Math.round(p*0.5).toLocaleString()}) / Professional ($${Math.round(p).toLocaleString()}) / Enterprise ($${Math.round(p*1.7).toLocaleString()})\n\nCase studies available?\n\nBest`,
-  General: (j, p) => `Hey, your ${j.title.slice(0,40)} project looks interesting. I specialize in engineering solutions — delivered 50+ projects internationally. Top-rated across platforms.\n\nScope: Basic ($${Math.round(p*0.5).toLocaleString()}) / Professional ($${Math.round(p).toLocaleString()}) / Enterprise ($${Math.round(p*1.7).toLocaleString()})\n\nLet's discuss?\n\nBest`
+// ═══ GEMINI AI PRO ENGINE ═══
+const DOMAIN_PROFILE = {
+  FEA: {
+    title: "FEA & Simulation Engineer",
+    skills: "ANSYS, ABAQUS, COMSOL, CFD, structural analysis, mesh optimization, Python automation, AutoCAD, SolidWorks",
+    achievements: "Delivered 40+ FEA projects across civil, mechanical, and aerospace sectors. Reduced simulation cycles 40% via Python scripting."
+  },
+  Flutter: {
+    title: "Senior Flutter Developer",
+    skills: "Flutter, Dart, Firebase, BLoC, REST APIs, CI/CD, app store publishing",
+    achievements: "Built 15+ production apps with 50K+ combined MAU. Consistent 60fps performance. Published on both App Store and Play Store."
+  },
+  AI_Systems: {
+    title: "AI/ML Systems Engineer",
+    skills: "PyTorch, TensorFlow, LLMs, RAG pipelines, MLOps, NLP, Computer Vision",
+    achievements: "Deployed production ML systems serving 100K+ requests/day. Optimized training pipelines from 6hrs to 8min."
+  },
+  General: {
+    title: "Senior Engineering Consultant",
+    skills: "Multidisciplinary engineering, project management, system architecture, cross-functional leadership",
+    achievements: "50+ international projects delivered. Top-rated across freelance platforms. 100% on-time delivery record."
+  }
 };
 
 function humanityScore(text) {
-  let s = 50;
-  const bad = ["i hope this email","dear hiring manager","i am writing to","to whom it may concern","i came across","please find attached"];
-  const good = ["i'm","i've","don't","let's","won't","can't"];
-  for (const b of bad) if (text.toLowerCase().includes(b)) s -= 12;
-  for (const g of good) if (text.toLowerCase().includes(g)) s += 8;
+  let s = 60;
+  const corporate = ["dear hiring manager","to whom it may concern","i am writing to","i came across","please find attached","i hope this email finds you","i would like to apply","as per your","enclosed please find","dear sir","dear madam","dear recruiter"];
+  const human = ["i'm","i've","don't","let's","won't","can't","hey","quick question","by the way"];
+  const specifics = ["$","%","week","day","hour","project","specific","exactly","similar","delivered","built","implemented"];
+  for (const b of corporate) if (text.toLowerCase().includes(b)) s -= 15;
+  for (const g of human) if (text.toLowerCase().includes(g)) s += 6;
+  for (const sp of specifics) if (text.toLowerCase().includes(sp)) s += 4;
   if (text.includes("?")) s += 5;
-  if (/\d/.test(text)) s += 5;
-  if (text.split("\n").length > 3) s += 5;
+  if (/\$\d/.test(text)) s += 8;
+  if (text.split("\n").filter(l => l.trim()).length > 4) s += 5;
+  const wordCount = text.split(/\s+/).length;
+  if (wordCount > 80 && wordCount < 300) s += 5;
   return Math.max(0, Math.min(100, s));
 }
 
 async function genProposal(job, env) {
   const price = Math.max((job.budget_max || 0) * 0.65, 300);
+  const prof = DOMAIN_PROFILE[job.domain] || DOMAIN_PROFILE.General;
+  const jobDesc = (job.description || "").slice(0,800);
+
   if (env.GEMINI_API_KEY?.startsWith("AIza")) {
     try {
-      const dp = DPROMPT[job.domain] || DPROMPT.General;
-      const prompt = `You are: ${dp}
-Write a SHORT confident freelance proposal (120 words max).
-RULES: Use contractions (I'm, I've, don't). Start with THEIR problem. Include 3 pricing tiers: Basic $${Math.round(price*0.5).toLocaleString()} / Professional $${Math.round(price).toLocaleString()} / Enterprise $${Math.round(price*1.7).toLocaleString()}. Sound like a real human expert. NEVER use corporate phrases. Be direct and confident.
+      const prompt = `ROLE: Professional freelance ${prof.title} applying for a specific job.
+TASK: Write a concise, confident cover message (100-180 words) for this EXACT job.
 
-JOB: ${job.title}
-DESCRIPTION: ${(job.description || "").slice(0,600)}`;
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${env.GEMINI_API_KEY}`, {
+ANTI-HALLUCINATION RULES (MANDATORY):
+- ONLY mention skills/experience DIRECTLY relevant to THIS job's requirements
+- If job is civil/structural engineering → talk about FEA, CAD, construction. NEVER mention ML/AI unless explicitly asked.
+- If job is mobile app development → talk about Flutter/React Native. NEVER mention neural networks unless asked.
+- If job is AI/ML → talk about PyTorch, models, data. NEVER mention Flutter unless asked.
+- If you cannot determine the domain, use general engineering consulting language.
+- NEVER invent fake metrics. Use ONLY: "${prof.achievements}"
+- NEVER use generic AI buzzwords: "leverage", "synergy", "paradigm", "disruptive", "scalable solutions"
+
+TONE: Confident but not arrogant. Conversational professional. Use contractions naturally.
+STRUCTURE: Hook (why this job) → Relevant experience → Pricing tiers → Call to action question
+
+PRICING TIERS (include exactly these):
+• Starter: $${Math.round(price*0.5).toLocaleString()}
+• Professional: $${Math.round(price).toLocaleString()}
+• Full Service: $${Math.round(price*1.5).toLocaleString()}
+
+YOUR PROFILE: ${prof.title}. ${prof.skills}. ${prof.achievements}.
+
+JOB TITLE: ${job.title}
+JOB DESCRIPTION: ${jobDesc}
+
+OUTPUT ONLY the cover message. No preamble, no "Here is...", no quotes around text.`;
+
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${env.GEMINI_API_KEY}`, {
         method: "POST", headers: {"Content-Type":"application/json"},
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.75, maxOutputTokens: 500 } })
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.6, maxOutputTokens: 700 } })
       });
       if (r.ok) {
         const d = await r.json();
-        const c = d.candidates?.[0]?.content?.parts?.[0]?.text || "";
-        if (c.length > 80) return { content: c, price, humanity_score: humanityScore(c) };
+        let c = d.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        c = c.replace(/^\s*["']|["']\s*$/g, "").replace(/^Here is\s+(a\s+)?(cover\s+message|proposal)[:\s]*/i, "").trim();
+        if (c.length > 120) return { content: c, price, humanity_score: humanityScore(c) };
       }
-    } catch (e) { console.error("Gemini err:", e.message); }
+    } catch (e) { console.error("Gemini Pro err:", e.message); }
   }
-  const t = TPL[job.domain] || TPL.General;
-  const c = t(job, price);
+  // Professional fallback — no hallucination, job-specific
+  const c = `Hi,
+
+I noticed your posting for "${job.title.slice(0,70)}" and wanted to reach out. As a ${prof.title} with hands-on experience in ${prof.skills.split(",").slice(0,3).join(", ")}, I believe I can deliver strong results for this project.
+
+${prof.achievements}
+
+I typically structure projects across three tiers:
+• Starter: $${Math.round(price*0.5).toLocaleString()} — core deliverables, focused scope
+• Professional: $${Math.round(price).toLocaleString()} — complete implementation
+• Full Service: $${Math.round(price*1.5).toLocaleString()} — full build + testing + documentation
+
+I'd be glad to discuss your timeline and specific requirements. What's your target delivery date?
+
+Best regards`;
   return { content: c, price, humanity_score: humanityScore(c) };
 }
 
@@ -447,7 +509,7 @@ async function scanAll(env) {
     await tJobFound(job, env);
     const prop = await genProposal(job, env);
     const pid = hashSync(job.id + prop.content.slice(0, 40));
-    await dbSaveProposal(env.DB, { id: pid, job_id: job.id, content: prop.content, price: prop.price, humanity_score: prop.humanity, domain: job.domain });
+    await dbSaveProposal(env.DB, { id: pid, job_id: job.id, content: prop.content, price: prop.price, humanity_score: prop.humanity_score, domain: job.domain });
     await tProposal(prop, job, env);
     props++;
     
@@ -469,7 +531,7 @@ async function scanAll(env) {
 
 // ═══ DASHBOARD HTML ═══
 const DASHBOARD = `<!DOCTYPE html>
-<html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>FDE v2.2</title>
+<html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>FDE v3.0</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,sans-serif}
 body{background:#0a0a0f;color:#e0e0e0;padding:20px}
@@ -499,16 +561,16 @@ button:hover{background:#00cc6a}
 .sr{background:#111;border:1px solid #222;border-radius:6px;padding:6px 10px;font-size:11px;color:#888}
 .sr .ok{color:#00ff88}.sr .off{color:#444}
 </style></head><body>
-<h1>Freelance Domination Engine v2.2</h1>
-<div class=subtitle>20 sources | Auto-apply via Email + Upwork API | AI proposals | Scans every 3 min</div>
+<h1>Freelance Domination Engine v3.0</h1>
+<div class=subtitle>20 sources | Gemini Pro | Anti-hallucination | Auto-apply | Scans every 3 min</div>
 <div class=status-bar id=bar></div>
-<button onclick="triggerScan()">⚡ TRIGGER MANUAL SCAN</button>
+<button onclick="triggerScan()">Trigger Manual Scan</button>
 <div class=stats id=stats></div>
-<h2 style="font-size:16px;color:#00ff88;margin:16px 0 8px">📡 Active Sources</h2>
+<h2 style="font-size:16px;color:#00ff88;margin:16px 0 8px">Active Sources</h2>
 <div class=sources id=sources></div>
-<h2 style="font-size:16px;color:#00ff88;margin:16px 0 8px">📋 Recent Jobs</h2>
+<h2 style="font-size:16px;color:#00ff88;margin:16px 0 8px">Recent Jobs</h2>
 <table><thead><tr><th>Budget<th>M%<th>Domain<th>Title<th>Source</thead><tbody id=jobs></tbody></table>
-<div class=ft>Auto-refreshes every 20s | <a href="/api/health">Health</a> | <a href="/api/stats">Stats</a> | <a href="/api/jobs">Jobs</a> | <a href="/api/applications">Applications</a></div>
+<div class=ft>Auto-refreshes every 20s | <a href="/api/health">Health</a> | <a href="/api/stats">Stats</a> | <a href="/api/jobs">Jobs</a> | <a href="/api/proposals">Proposals</a> | <a href="/api/applications">Applications</a></div>
 <script>
 const ALL_SRC = ["WeWorkRemotely","WorkingNomads","Remotive","HN WhoIsHiring","EuroTechJobs","CryptoJobs","CodePen","Landing.jobs","4DayWeek","SlashDev","RemoteOK","Reddit r/slavelabour","Reddit r/forhire","Reddit r/hiring","Reddit r/freelance","GitHub Jobs API","Remotive (dev)","WWR Programming","WWR Frontend","WWR Fullstack"];
 async function load(){
@@ -516,8 +578,8 @@ async function load(){
     const s=await(await fetch('/api/stats')).json();
     document.getElementById('stats').innerHTML='<div class=stat><div class=n>'+s.total+'</div><div class=l>Total Jobs</div></div><div class=stat><div class=n>'+s.new_jobs+'</div><div class=l>New</div></div><div class=stat><div class=n>'+s.proposals+'</div><div class=l>Proposals</div></div>';
     const h=await(await fetch('/api/health')).json();
-    const tgStatus = typeof h.telegram === 'object' ? (h.telegram.bot_ok ? '✅ ' + h.telegram.bot_username : '❌ error') : h.telegram;
-    document.getElementById('bar').innerHTML='<span class=badge>⚡ Status: <span class=v>'+h.status+'</span></span><span class=badge>🤖 Gemini: <span class=v>'+h.gemini+'</span></span><span class=badge>📱 Telegram: <span class=v>'+tgStatus+'</span></span><span class=badge>💰 Min: <span class=v>$'+h.min_budget+'</span></span>';
+    const tgStatus = typeof h.telegram === 'object' ? (h.telegram.bot_ok ? 'OK ' + h.telegram.bot_username : 'Error') : h.telegram;
+    document.getElementById('bar').innerHTML='<span class=badge>Status: <span class=v>'+h.status+'</span></span><span class=badge>Gemini: <span class=v>'+h.gemini+'</span></span><span class=badge>Telegram: <span class=v>'+tgStatus+'</span></span><span class=badge>Sources: <span class=v>'+h.sources+'</span></span>';
     document.getElementById('sources').innerHTML=ALL_SRC.map(s=>'<div class=sr><span class=ok>●</span> '+s+'</div>').join('');
     const js=await(await fetch('/api/jobs?limit=25')).json();
     document.getElementById('jobs').innerHTML=js.map(j=>{
@@ -530,7 +592,7 @@ async function load(){
 async function triggerScan(){
   const b=document.querySelector('button');b.textContent='Scanning...';b.disabled=true;
   try{await fetch('/api/scan',{method:'POST'});b.textContent='Scan Triggered!';}catch{b.textContent='Error';}
-  setTimeout(()=>{b.textContent='⚡ TRIGGER MANUAL SCAN';b.disabled=false;},3000);
+  setTimeout(()=>{b.textContent='Trigger Manual Scan';b.disabled=false;},3000);
 }
 load();setInterval(load,20000);
 </script></body></html>`;
@@ -548,14 +610,17 @@ async function router(req, env) {
     return new Response(JSON.stringify({
       status: "live", gemini: env.GEMINI_API_KEY?.startsWith("AIza") ? "active" : "missing",
       telegram: { token_set: !!env.TELEGRAM_BOT_TOKEN, chat_id_set: !!env.TELEGRAM_CHAT_ID, bot_username: botInfo.result?.username || null, bot_ok: botInfo.ok },
-      min_budget: CFG.MIN_BUDGET, sources: PLATFORMS.length, version: "2.2", time: new Date().toISOString()
+      min_budget: CFG.MIN_BUDGET, sources: PLATFORMS.length, version: "3.0", time: new Date().toISOString()
     }), { headers: CORS });
   }
 
   if (p === "/api/stats") return new Response(JSON.stringify(await dbStats(env.DB)), { headers: CORS });
   if (p === "/api/jobs") { const lim = parseInt(u.searchParams.get("limit") || "50"); return new Response(JSON.stringify(await dbGetJobs(env.DB, lim)), { headers: CORS }); }
   if (p === "/api/proposals") return new Response(JSON.stringify(await dbGetProposals(env.DB)), { headers: CORS });
-  if (p === "/api/applications") { const { results } = await env.DB.prepare(`SELECT * FROM applications ORDER BY created_at DESC LIMIT 50`).all(); return new Response(JSON.stringify(results || []), { headers: CORS }); }
+  if (p === "/api/applications") { 
+    const { results } = await env.DB.prepare(`SELECT * FROM applications ORDER BY created_at DESC LIMIT 50`).all();
+    return new Response(JSON.stringify(results || []), { headers: CORS }); 
+  }
   if (p === "/api/logs") { const { results } = await env.DB.prepare(`SELECT * FROM logs ORDER BY created DESC LIMIT 50`).all(); return new Response(JSON.stringify(results || []), { headers: CORS }); }
 
   if (p === "/api/scan" && req.method === "POST") {
@@ -563,12 +628,17 @@ async function router(req, env) {
     catch (e) { await tError("Scan", e, env); return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: CORS }); }
   }
 
-  if (p === "/api/startup") { const result = await tStartup(env); return new Response(JSON.stringify({ startup: "sent", telegram: result }), { headers: CORS }); }
+  if (p === "/api/startup") {
+    const result = await tStartup(env);
+    return new Response(JSON.stringify({ startup: "sent", telegram: result }), { headers: CORS });
+  }
+
   if (p === "/api/test-telegram") {
     const botInfo = await tGetMe(env);
-    const testMsg = await tSend(`🧪 <b>Telegram Test</b>\nIf you see this, your bot is WORKING!\nBot: ${botInfo.result?.username || "unknown"}\nTime: ${new Date().toISOString()}`, env);
+    const testMsg = await tSend(`Telegram Test\nIf you see this, your bot is WORKING!\nBot: ${botInfo.result?.username || "unknown"}\nTime: ${new Date().toISOString()}`, env);
     return new Response(JSON.stringify({ bot: botInfo, testMessage: testMsg, chat_id: env.TELEGRAM_CHAT_ID }), { headers: CORS });
   }
+
   if (p === "/api/cron-status") {
     const cycle = await env.CACHE.get("cycle") || "0";
     const lastLog = await env.DB.prepare(`SELECT * FROM logs ORDER BY created DESC LIMIT 5`).all();
