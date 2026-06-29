@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
-//  FREELANCE DOMINATION ENGINE v2.1 — WORKING MULTI-SOURCE
-//  20 job sources | RSS + API | AI proposals | Telegram alerts
-//  Auto-scans every 3 minutes | All budget ranges
+//  FREELANCE DOMINATION ENGINE v2.1.1 — TELEGRAM DEBUG EDITION
+//  20 working sources | RSS + API | AI proposals | Telegram
+//  Debug endpoints for self-diagnosis | Auto-scans every 3 min
 // ═══════════════════════════════════════════════════════════════
 
 // ═══ CONFIG ═══
@@ -19,27 +19,40 @@ const CFG = {
 
 // ═══ TELEGRAM ═══
 async function tSend(msg, env, parseMode = "HTML") {
-  if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) return false;
+  if (!env.TELEGRAM_BOT_TOKEN || !env.TELEGRAM_CHAT_ID) return { ok: false, error: "missing credentials" };
   try {
     const r = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ chat_id: env.TELEGRAM_CHAT_ID, text: msg.slice(0, CFG.TELEGRAM_MAX_LEN), parse_mode: parseMode, disable_web_page_preview: true })
     });
-    return r.ok;
-  } catch (e) { console.error("TG_ERR:", e.message); return false; }
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      console.error("TG_API_ERR:", r.status, err.description || "unknown");
+      return { ok: false, error: err.description || `HTTP ${r.status}` };
+    }
+    return { ok: true };
+  } catch (e) { console.error("TG_ERR:", e.message); return { ok: false, error: e.message }; }
+}
+
+async function tGetMe(env) {
+  if (!env.TELEGRAM_BOT_TOKEN) return { ok: false, error: "no token" };
+  try {
+    const r = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/getMe`);
+    return await r.json();
+  } catch (e) { return { ok: false, error: e.message }; }
 }
 
 async function tStartup(env) {
   const m = `🚀 <b>FREELANCE DOMINATION ENGINE v2.1 — ACTIVATED</b>
 
 ⏰ Scanning every <b>3 minutes</b>
-💰 Budget range: <b>All budgets</b> (RSS rarely shows salary)
+💰 Budget range: <b>All budgets</b>
 🔍 Sources: <b>20 working platforms</b>
 🤖 AI: <b>Gemini 1.5 Flash</b> with humanity scoring
 📊 Domains: <b>FEA | Flutter | AI Systems | General</b>
 
 Your 24/7 job hunter is <b>LIVE</b>. First scan incoming...`;
-  await tSend(m, env);
+  return await tSend(m, env);
 }
 
 async function tError(ctx, err, env) {
@@ -273,13 +286,13 @@ const PLATFORMS = [
   { name: "slashdev",          url: () => `https://slashdev.io/jobs?format=rss`,                    type: "rss" },
   { name: "remoteok",          url: () => `https://remoteok.com/remote-jobs.rss`,                   type: "rss" },
 
-  // ─── REDDIT RAW FEEDS (simpler = more reliable) ───
+  // ─── REDDIT RAW FEEDS ───
   { name: "reddit_slavelabour",  url: () => `https://www.reddit.com/r/slavelabour/new/.rss`,       type: "rss" },
   { name: "reddit_forhire",      url: () => `https://www.reddit.com/r/forhire/new/.rss`,            type: "rss" },
   { name: "reddit_hiring",       url: () => `https://www.reddit.com/r/hiring/new/.rss`,             type: "rss" },
   { name: "reddit_freelance",    url: () => `https://www.reddit.com/r/freelance/new/.rss`,          type: "rss" },
 
-  // ─── API SOURCES (reliable, structured) ───
+  // ─── API SOURCES ───
   { name: "api_github_jobs",   url: () => `https://jobs.github.com/positions.json?description=engineer&location=remote`, type: "json_api" },
 
   // ─── RSS WITH KEYWORD ROTATION ───
@@ -371,7 +384,7 @@ async function scanAll(env) {
     await tJobFound(job, env);
     const prop = await genProposal(job, env);
     const pid = hashSync(job.id + prop.content.slice(0, 40));
-    await dbSaveProposal(env.DB, { id: pid, job_id: job.id, content: prop.content, price: prop.price, humanity_score: prop.humanity_score, domain: job.domain });
+    await dbSaveProposal(env.DB, { id: pid, job_id: job.id, content: prop.content, price: prop.price, humanity_score: prop.humanity, domain: job.domain });
     await tProposal(prop, job, env);
     props++;
   }
@@ -426,7 +439,7 @@ button:hover{background:#00cc6a}
 <div class=sources id=sources></div>
 <h2 style="font-size:16px;color:#00ff88;margin:16px 0 8px">📋 Recent Jobs</h2>
 <table><thead><tr><th>Budget<th>M%<th>Domain<th>Title<th>Source</thead><tbody id=jobs></tbody></table>
-<div class=ft>Auto-refreshes every 20s | <a href="/api/health">Health</a> | <a href="/api/stats">Stats</a> | <a href="/api/jobs">All Jobs</a></div>
+<div class=ft>Auto-refreshes every 20s | <a href="/api/health">Health</a> | <a href="/api/stats">Stats</a> | <a href="/api/jobs">All Jobs</a> | <a href="/api/test-telegram">Test TG</a> | <a href="/api/cron-status">Cron</a></div>
 <script>
 const ALL_SRC = ["WeWorkRemotely","WorkingNomads","Remotive","HN WhoIsHiring","EuroTechJobs","CryptoJobs","CodePen","Landing.jobs","4DayWeek","SlashDev","RemoteOK","Reddit r/slavelabour","Reddit r/forhire","Reddit r/hiring","Reddit r/freelance","GitHub Jobs API","Remotive (dev)","WWR Programming","WWR Frontend","WWR Fullstack"];
 async function load(){
@@ -434,7 +447,8 @@ async function load(){
     const s=await(await fetch('/api/stats')).json();
     document.getElementById('stats').innerHTML='<div class=stat><div class=n>'+s.total+'</div><div class=l>Total Jobs</div></div><div class=stat><div class=n>'+s.new_jobs+'</div><div class=l>New</div></div><div class=stat><div class=n>'+s.proposals+'</div><div class=l>Proposals</div></div>';
     const h=await(await fetch('/api/health')).json();
-    document.getElementById('bar').innerHTML='<span class=badge>⚡ Status: <span class=v>'+h.status+'</span></span><span class=badge>🤖 Gemini: <span class=v>'+h.gemini+'</span></span><span class=badge>📱 Telegram: <span class=v>'+h.telegram+'</span></span><span class=badge>💰 Min: <span class=v>$'+h.min_budget+'</span></span>';
+    const tgStatus = typeof h.telegram === 'object' ? (h.telegram.bot_ok ? '✅ ' + h.telegram.bot_username : '❌ error') : h.telegram;
+    document.getElementById('bar').innerHTML='<span class=badge>⚡ Status: <span class=v>'+h.status+'</span></span><span class=badge>🤖 Gemini: <span class=v>'+h.gemini+'</span></span><span class=badge>📱 Telegram: <span class=v>'+tgStatus+'</span></span><span class=badge>💰 Min: <span class=v>$'+h.min_budget+'</span></span>';
     document.getElementById('sources').innerHTML=ALL_SRC.map(s=>'<div class=sr><span class=ok>●</span> '+s+'</div>').join('');
     const js=await(await fetch('/api/jobs?limit=25')).json();
     document.getElementById('jobs').innerHTML=js.map(j=>{
@@ -461,10 +475,11 @@ async function router(req, env) {
   if (p === "/" || p === "/dashboard") return new Response(DASHBOARD, { headers: { "Content-Type": "text/html" } });
 
   if (p === "/api/health") {
+    const botInfo = await tGetMe(env);
     return new Response(JSON.stringify({
       status: "live", gemini: env.GEMINI_API_KEY?.startsWith("AIza") ? "active" : "missing",
-      telegram: env.TELEGRAM_BOT_TOKEN ? "active" : "missing", min_budget: CFG.MIN_BUDGET,
-      sources: PLATFORMS.length, version: "2.1", time: new Date().toISOString()
+      telegram: { token_set: !!env.TELEGRAM_BOT_TOKEN, chat_id_set: !!env.TELEGRAM_CHAT_ID, bot_username: botInfo.result?.username || null, bot_ok: botInfo.ok },
+      min_budget: CFG.MIN_BUDGET, sources: PLATFORMS.length, version: "2.1.1", time: new Date().toISOString()
     }), { headers: CORS });
   }
 
@@ -479,8 +494,20 @@ async function router(req, env) {
   }
 
   if (p === "/api/startup") {
-    await tStartup(env);
-    return new Response(JSON.stringify({ startup: "sent" }), { headers: CORS });
+    const result = await tStartup(env);
+    return new Response(JSON.stringify({ startup: "sent", telegram: result }), { headers: CORS });
+  }
+
+  if (p === "/api/test-telegram") {
+    const botInfo = await tGetMe(env);
+    const testMsg = await tSend(`🧪 <b>Telegram Test</b>\nIf you see this, your bot is WORKING!\nBot: ${botInfo.result?.username || "unknown"}\nTime: ${new Date().toISOString()}`, env);
+    return new Response(JSON.stringify({ bot: botInfo, testMessage: testMsg, chat_id: env.TELEGRAM_CHAT_ID }), { headers: CORS });
+  }
+
+  if (p === "/api/cron-status") {
+    const cycle = await env.CACHE.get("cycle") || "0";
+    const lastLog = await env.DB.prepare(`SELECT * FROM logs ORDER BY created DESC LIMIT 5`).all();
+    return new Response(JSON.stringify({ cycle, cron_schedule: "*/3 * * * *", last_logs: lastLog.results || [] }), { headers: CORS });
   }
 
   return new Response(JSON.stringify({ error: "not found" }), { status: 404, headers: CORS });
