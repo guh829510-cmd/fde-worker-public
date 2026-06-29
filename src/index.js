@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
-//  FREELANCE DOMINATION ENGINE v2.1.1 — TELEGRAM DEBUG EDITION
-//  20 working sources | RSS + API | AI proposals | Telegram
-//  Debug endpoints for self-diagnosis | Auto-scans every 3 min
+//  FREELANCE DOMINATION ENGINE v2.2 — AUTO-APPLY ENGINE
+//  20 sources | Auto-apply via email + Upwork API | AI proposals
+//  Telegram alerts | Web dashboard | Scans every 3 min
 // ═══════════════════════════════════════════════════════════════
 
 // ═══ CONFIG ═══
@@ -43,15 +43,15 @@ async function tGetMe(env) {
 }
 
 async function tStartup(env) {
-  const m = `🚀 <b>FREELANCE DOMINATION ENGINE v2.1 — ACTIVATED</b>
+  const m = `🚀 <b>FREELANCE DOMINATION ENGINE v2.2 — ACTIVATED</b>
 
 ⏰ Scanning every <b>3 minutes</b>
-💰 Budget range: <b>All budgets</b>
-🔍 Sources: <b>20 working platforms</b>
-🤖 AI: <b>Gemini 1.5 Flash</b> with humanity scoring
+🔍 Sources: <b>20 platforms</b>
+🤖 AI: <b>Gemini 1.5 Flash</b> proposals + auto-apply
+📧 Auto-apply: Email + Upwork API
 📊 Domains: <b>FEA | Flutter | AI Systems | General</b>
 
-Your 24/7 job hunter is <b>LIVE</b>. First scan incoming...`;
+Your 24/7 job hunter is <b>LIVE</b>.`;
   return await tSend(m, env);
 }
 
@@ -63,7 +63,7 @@ async function tError(ctx, err, env) {
 
 async function tScanStart(cycle, env) {
   await tSend(`🔍 <b>Scan #${cycle} STARTED</b>
-Searching 20 platforms for FEA/Flutter/AI jobs...`, env);
+Searching 20 platforms...`, env);
 }
 
 async function tJobFound(job, env) {
@@ -86,20 +86,36 @@ ${prop.content.slice(0,950)}
   await tSend(m, env);
 }
 
-async function tSummary(cycle, newJobs, props, stats, env) {
-  if (!newJobs.length && !props) return;
-  const q = newJobs.filter(j => j.budget_max < 1000).length;
+async function tApplyStatus(job, result, env) {
+  if (result.method === "email") {
+    await tSend(`📧 <b>AUTO-APPLY QUEUED</b>
+Method: Email application
+To: ${result.recipient}
+Job: ${job.title.slice(0,60)}
+Status: ${result.status === "queued" ? "⏳ Ready to send" : result.status}`, env);
+  } else if (result.method === "upwork_api") {
+    const icon = result.status === "submitted" ? "✅" : "❌";
+    await tSend(`${icon} <b>Upwork Auto-Apply</b>
+Job: ${job.title.slice(0,60)}
+Status: ${result.status}${result.error ? "\nError: " + result.error : ""}`, env);
+  }
+}
+
+async function tSummary(cycle, newJobs, props, autoApplied, stats, env) {
+  const q = newJobs.filter(j => j.budget_max < 1000 && j.budget_max > 0).length;
   const m = newJobs.filter(j => j.budget_max >= 1000 && j.budget_max < 3000).length;
   const s = newJobs.filter(j => j.budget_max >= 3000 && j.budget_max < 6000).length;
   const p = newJobs.filter(j => j.budget_max >= 6000).length;
-  const top = [...newJobs].sort((a, b) => b.budget_max - a.budget_max)[0];
+  const top = [...newJobs].sort((a, b) => b.match_score - a.match_score)[0];
   let msg = `✅ <b>Scan #${cycle} COMPLETE</b>
 
-<b>NEW JOBS FOUND: ${newJobs.length}</b>
-${q ? `⚡ Quick ($300-999): ${q}\n` : ""}${m ? `📊 Mid ($1K-2.9K): ${m}\n` : ""}${s ? `💼 Solid ($3K-6K): ${s}\n` : ""}${p ? `👑 Premium ($6K+): ${p}\n` : ""}
-📝 Proposals generated: ${props}
-📈 Total DB: ${stats.total} jobs | ${stats.proposals} proposals`;
-  if (top) msg += `\n\n🏆 <b>Top Job:</b> $${top.budget_max.toLocaleString()} — ${top.title.slice(0,50)}...`;
+<b>NEW JOBS: ${newJobs.length}</b> | 📝 Proposals: ${props} | 🤖 Auto-Applied: ${autoApplied}`;
+  if (q) msg += `\n⚡ Quick ($300-999): ${q}`;
+  if (m) msg += `\n📊 Mid ($1K-2.9K): ${m}`;
+  if (s) msg += `\n💼 Solid ($3K-6K): ${s}`;
+  if (p) msg += `\n👑 Premium ($6K+): ${p}`;
+  if (top) msg += `\n\n🏆 <b>Top:</b> ${Math.round(top.match_score)}% — ${top.title.slice(0,55)}...`;
+  if (!newJobs.length) msg += `\n\n<i>No new jobs — scanning again in 3 min.</i>`;
   await tSend(msg, env);
 }
 
@@ -108,6 +124,7 @@ async function dbInit(db) {
   await db.batch([
     db.prepare(`CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY,source TEXT,title TEXT,description TEXT,url TEXT,budget_max REAL,budget_type TEXT,skills TEXT,match_score REAL,status TEXT DEFAULT 'new',created_at TEXT)`),
     db.prepare(`CREATE TABLE IF NOT EXISTS proposals(id TEXT PRIMARY KEY,job_id TEXT,content TEXT,price REAL,humanity_score REAL,domain TEXT,status TEXT DEFAULT 'draft',created_at TEXT)`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS applications(id TEXT PRIMARY KEY,job_id TEXT,method TEXT,recipient TEXT,subject TEXT,body TEXT,status TEXT DEFAULT 'pending',created_at TEXT)`),
     db.prepare(`CREATE TABLE IF NOT EXISTS logs(id INTEGER PRIMARY KEY AUTOINCREMENT,type TEXT,msg TEXT,created TEXT)`),
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_jobs_created ON jobs(created_at DESC)`),
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status)`),
@@ -171,6 +188,66 @@ function detectDomain(title, desc) {
   let b = "General", bs = 0;
   for (const [d, sc] of Object.entries(s)) { if (sc > bs) { b = d; bs = sc; } }
   return b;
+}
+
+// ═══ AUTO-APPLY ENGINE ═══
+
+function extractEmail(text) {
+  const m = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+  return m ? m[0] : null;
+}
+
+async function autoApplyEmail(job, proposal, env) {
+  const email = extractEmail(job.description);
+  if (!email) return { method: "none", reason: "no email found" };
+  
+  const subject = `Application: ${job.title.slice(0, 60)}`;
+  const body = `${proposal.content}\n\n---\nPortfolio: [Your portfolio link]\nResume: [Your resume link]\nLinkedIn: [Your LinkedIn]`;
+  
+  await env.DB.prepare(`INSERT OR IGNORE INTO applications(id,job_id,method,recipient,subject,body,status,created_at)VALUES(?,?,?,?,?,?,?,?)`)
+    .bind(hashSync(job.id + email), job.id, "email", email, subject, body, "pending", new Date().toISOString()).run();
+  
+  return { method: "email", recipient: email, status: "queued" };
+}
+
+async function autoApplyUpwork(job, proposal, env) {
+  if (!env.UPWORK_API_TOKEN || !job.url.includes("upwork.com")) return { method: "none" };
+  try {
+    const jobKey = job.url.match(/~[a-f0-9]+/)?.[0];
+    if (!jobKey) return { method: "none", reason: "no job key" };
+    
+    const r = await fetch(`https://www.upwork.com/api/proposals/v1/jobs/${jobKey}/proposals`, {
+      method: "POST",
+      headers: { 
+        "Authorization": `Bearer ${env.UPWORK_API_TOKEN}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        coverLetter: proposal.content.slice(0, 5000),
+        milestoneDeclarations: [{ amount: proposal.price, description: job.title.slice(0, 100) }],
+        contractorTerms: { confidentialTermsAccepted: true }
+      })
+    });
+    
+    if (r.ok) {
+      await dbLog(env.DB, "auto_apply", `Upwork proposal sent for ${job.title.slice(0,50)}`);
+      return { method: "upwork_api", status: "submitted" };
+    }
+    const err = await r.json().catch(() => ({}));
+    return { method: "upwork_api", status: "failed", error: err.message || r.status };
+  } catch (e) {
+    return { method: "upwork_api", status: "error", error: e.message };
+  }
+}
+
+async function autoApply(job, proposal, env) {
+  if (job.source.includes("upwork")) {
+    return await autoApplyUpwork(job, proposal, env);
+  }
+  const emailResult = await autoApplyEmail(job, proposal, env);
+  if (emailResult.method === "email") return emailResult;
+  
+  return { method: "manual", reason: "no auto-apply channel available" };
 }
 
 // ═══ GEMINI AI ═══
@@ -273,7 +350,6 @@ function hashSync(str) {
 
 // ═══ WORKING JOB SOURCES ═══
 const PLATFORMS = [
-  // ─── CONFIRMED WORKING RSS ───
   { name: "weworkremotely",    url: () => `https://weworkremotely.com/remote-jobs.rss`,             type: "rss" },
   { name: "workingnomads",     url: () => `https://www.workingnomads.com/jobs.atom`,                type: "rss" },
   { name: "remotive_jobs",     url: () => `https://remotive.com/remote-jobs/feed`,                  type: "rss" },
@@ -285,17 +361,11 @@ const PLATFORMS = [
   { name: "4dayweek",          url: () => `https://4dayweek.io/remote-jobs/rss.xml`,                type: "rss" },
   { name: "slashdev",          url: () => `https://slashdev.io/jobs?format=rss`,                    type: "rss" },
   { name: "remoteok",          url: () => `https://remoteok.com/remote-jobs.rss`,                   type: "rss" },
-
-  // ─── REDDIT RAW FEEDS ───
   { name: "reddit_slavelabour",  url: () => `https://www.reddit.com/r/slavelabour/new/.rss`,       type: "rss" },
   { name: "reddit_forhire",      url: () => `https://www.reddit.com/r/forhire/new/.rss`,            type: "rss" },
   { name: "reddit_hiring",       url: () => `https://www.reddit.com/r/hiring/new/.rss`,             type: "rss" },
   { name: "reddit_freelance",    url: () => `https://www.reddit.com/r/freelance/new/.rss`,          type: "rss" },
-
-  // ─── API SOURCES ───
   { name: "api_github_jobs",   url: () => `https://jobs.github.com/positions.json?description=engineer&location=remote`, type: "json_api" },
-
-  // ─── RSS WITH KEYWORD ROTATION ───
   { name: "remotive_dev",      url: kw => `https://remotive.com/remote-jobs/feed/?s=${enc(kw)}&job_type=developer`, type: "rss" },
   { name: "wework_prog",       url: () => `https://weworkremotely.com/categories/remote-programming-jobs.rss`, type: "rss" },
   { name: "wework_frontend",   url: () => `https://weworkremotely.com/categories/remote-front-end-programming-jobs.rss`, type: "rss" },
@@ -342,14 +412,10 @@ async function scanAll(env) {
 
       if (src.type === "json_api") {
         const data = await fetchJSON(url);
-        if (data) {
-          jobs = parseGitHubJobs(data, src.name);
-        } else { status = "empty_api"; }
+        if (data) { jobs = parseGitHubJobs(data, src.name); } else { status = "empty_api"; }
       } else {
         const xml = await fetchText(url);
-        if (xml) {
-          jobs = parseRSS(xml, src.name);
-        } else { status = "empty_rss"; }
+        if (xml) { jobs = parseRSS(xml, src.name); } else { status = "empty_rss"; }
       }
 
       allJobs.push(...jobs);
@@ -370,37 +436,40 @@ async function scanAll(env) {
   }
 
   const newJobs = [];
-  const alerts = [];
   for (const j of unique) {
-    if (await dbInsertJob(env.DB, j)) {
-      newJobs.push(j);
-      if (j.budget_max >= 500 || j.match_score >= 25) alerts.push(j);
-    }
+    if (await dbInsertJob(env.DB, j)) { newJobs.push(j); }
   }
 
   let props = 0;
-  const topAlerts = alerts.sort((a, b) => b.match_score - a.match_score).slice(0, 4);
-  for (const job of topAlerts) {
+  let autoApplied = 0;
+  const jobsForProposals = newJobs.slice(0, 5);
+  for (const job of jobsForProposals) {
     await tJobFound(job, env);
     const prop = await genProposal(job, env);
     const pid = hashSync(job.id + prop.content.slice(0, 40));
     await dbSaveProposal(env.DB, { id: pid, job_id: job.id, content: prop.content, price: prop.price, humanity_score: prop.humanity, domain: job.domain });
     await tProposal(prop, job, env);
     props++;
+    
+    const applyResult = await autoApply(job, prop, env);
+    if (applyResult.method !== "manual") {
+      await tApplyStatus(job, applyResult, env);
+      if (applyResult.status === "submitted" || applyResult.status === "queued") autoApplied++;
+    }
   }
 
   const stats = await dbStats(env.DB);
-  const logMsg = `Cycle ${cycle}: ${newJobs.length} new, ${props} proposals. Sources: ${fetchLog.join(" | ")}`;
-  await tSummary(cycle, newJobs, props, stats, env);
+  const logMsg = `Cycle ${cycle}: ${newJobs.length} new, ${props} proposals, ${autoApplied} auto-applied. Sources: ${fetchLog.join(" | ")}`;
+  await tSummary(cycle, newJobs, props, autoApplied, stats, env);
   await dbLog(env.DB, "scan_complete", logMsg);
-  console.log(`Scan #${cycle}: ${newJobs.length} new jobs, ${props} proposals`);
+  console.log(`Scan #${cycle}: ${newJobs.length} new jobs, ${props} proposals, ${autoApplied} auto-applied`);
 
-  return { cycle, newJobs: newJobs.length, proposals: props, sources: rotated.length };
+  return { cycle, newJobs: newJobs.length, proposals: props, autoApplied, sources: rotated.length };
 }
 
 // ═══ DASHBOARD HTML ═══
 const DASHBOARD = `<!DOCTYPE html>
-<html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>FDE v2.1</title>
+<html><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>FDE v2.2</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,sans-serif}
 body{background:#0a0a0f;color:#e0e0e0;padding:20px}
@@ -430,8 +499,8 @@ button:hover{background:#00cc6a}
 .sr{background:#111;border:1px solid #222;border-radius:6px;padding:6px 10px;font-size:11px;color:#888}
 .sr .ok{color:#00ff88}.sr .off{color:#444}
 </style></head><body>
-<h1>Freelance Domination Engine v2.1</h1>
-<div class=subtitle>20 working sources | FEA · Flutter · AI · General | All budgets | Scans every 3 min</div>
+<h1>Freelance Domination Engine v2.2</h1>
+<div class=subtitle>20 sources | Auto-apply via Email + Upwork API | AI proposals | Scans every 3 min</div>
 <div class=status-bar id=bar></div>
 <button onclick="triggerScan()">⚡ TRIGGER MANUAL SCAN</button>
 <div class=stats id=stats></div>
@@ -439,7 +508,7 @@ button:hover{background:#00cc6a}
 <div class=sources id=sources></div>
 <h2 style="font-size:16px;color:#00ff88;margin:16px 0 8px">📋 Recent Jobs</h2>
 <table><thead><tr><th>Budget<th>M%<th>Domain<th>Title<th>Source</thead><tbody id=jobs></tbody></table>
-<div class=ft>Auto-refreshes every 20s | <a href="/api/health">Health</a> | <a href="/api/stats">Stats</a> | <a href="/api/jobs">All Jobs</a> | <a href="/api/test-telegram">Test TG</a> | <a href="/api/cron-status">Cron</a></div>
+<div class=ft>Auto-refreshes every 20s | <a href="/api/health">Health</a> | <a href="/api/stats">Stats</a> | <a href="/api/jobs">Jobs</a> | <a href="/api/applications">Applications</a></div>
 <script>
 const ALL_SRC = ["WeWorkRemotely","WorkingNomads","Remotive","HN WhoIsHiring","EuroTechJobs","CryptoJobs","CodePen","Landing.jobs","4DayWeek","SlashDev","RemoteOK","Reddit r/slavelabour","Reddit r/forhire","Reddit r/hiring","Reddit r/freelance","GitHub Jobs API","Remotive (dev)","WWR Programming","WWR Frontend","WWR Fullstack"];
 async function load(){
@@ -479,13 +548,14 @@ async function router(req, env) {
     return new Response(JSON.stringify({
       status: "live", gemini: env.GEMINI_API_KEY?.startsWith("AIza") ? "active" : "missing",
       telegram: { token_set: !!env.TELEGRAM_BOT_TOKEN, chat_id_set: !!env.TELEGRAM_CHAT_ID, bot_username: botInfo.result?.username || null, bot_ok: botInfo.ok },
-      min_budget: CFG.MIN_BUDGET, sources: PLATFORMS.length, version: "2.1.1", time: new Date().toISOString()
+      min_budget: CFG.MIN_BUDGET, sources: PLATFORMS.length, version: "2.2", time: new Date().toISOString()
     }), { headers: CORS });
   }
 
   if (p === "/api/stats") return new Response(JSON.stringify(await dbStats(env.DB)), { headers: CORS });
   if (p === "/api/jobs") { const lim = parseInt(u.searchParams.get("limit") || "50"); return new Response(JSON.stringify(await dbGetJobs(env.DB, lim)), { headers: CORS }); }
   if (p === "/api/proposals") return new Response(JSON.stringify(await dbGetProposals(env.DB)), { headers: CORS });
+  if (p === "/api/applications") { const { results } = await env.DB.prepare(`SELECT * FROM applications ORDER BY created_at DESC LIMIT 50`).all(); return new Response(JSON.stringify(results || []), { headers: CORS }); }
   if (p === "/api/logs") { const { results } = await env.DB.prepare(`SELECT * FROM logs ORDER BY created DESC LIMIT 50`).all(); return new Response(JSON.stringify(results || []), { headers: CORS }); }
 
   if (p === "/api/scan" && req.method === "POST") {
@@ -493,17 +563,12 @@ async function router(req, env) {
     catch (e) { await tError("Scan", e, env); return new Response(JSON.stringify({ error: e.message }), { status: 500, headers: CORS }); }
   }
 
-  if (p === "/api/startup") {
-    const result = await tStartup(env);
-    return new Response(JSON.stringify({ startup: "sent", telegram: result }), { headers: CORS });
-  }
-
+  if (p === "/api/startup") { const result = await tStartup(env); return new Response(JSON.stringify({ startup: "sent", telegram: result }), { headers: CORS }); }
   if (p === "/api/test-telegram") {
     const botInfo = await tGetMe(env);
     const testMsg = await tSend(`🧪 <b>Telegram Test</b>\nIf you see this, your bot is WORKING!\nBot: ${botInfo.result?.username || "unknown"}\nTime: ${new Date().toISOString()}`, env);
     return new Response(JSON.stringify({ bot: botInfo, testMessage: testMsg, chat_id: env.TELEGRAM_CHAT_ID }), { headers: CORS });
   }
-
   if (p === "/api/cron-status") {
     const cycle = await env.CACHE.get("cycle") || "0";
     const lastLog = await env.DB.prepare(`SELECT * FROM logs ORDER BY created DESC LIMIT 5`).all();
@@ -521,10 +586,7 @@ export default {
     const started = await env.CACHE.get(startupKey);
     if (!started) {
       await env.CACHE.put(startupKey, "1", { expirationTtl: 86400 });
-      ctx.waitUntil((async () => {
-        await tStartup(env);
-        await scanAll(env);
-      })());
+      ctx.waitUntil((async () => { await tStartup(env); await scanAll(env); })());
     }
     return router(req, env);
   },
